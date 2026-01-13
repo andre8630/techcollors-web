@@ -1,0 +1,27 @@
+import { createRouter } from "next-connect";
+import controller from "src/infra/controller";
+import user from "src/models/user";
+import session from "src/models/session";
+
+const router = createRouter();
+
+router.use(controller.injectAnonymousOrUser);
+router.get(controller.canRequest("create:session", "read:session"), getHandler);
+
+export default router.handler(controller.errorHandler);
+
+async function getHandler(request, response) {
+  const sessionToken = request.cookies.session_id;
+
+  const sessionObject = await session.findValidSessionByToken(sessionToken);
+
+  await session.renew(sessionObject.id);
+  controller.setSessionCookie(sessionObject.token, response);
+  const userFound = await user.findOneById(sessionObject.user_id);
+
+  response.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, max-age=0, must-revalidate",
+  );
+  return response.status(200).json(userFound);
+}
